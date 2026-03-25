@@ -1,0 +1,1 @@
+Experienced backend engineer with 4 years in Python, FastAPI, PostgreSQL, Redis, Docker, and AWS. Built scalable APIs and solved data structures and algorithms interview problems.
