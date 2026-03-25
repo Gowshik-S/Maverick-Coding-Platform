@@ -1,11 +1,10 @@
-import ast
-import builtins
 import json
-import multiprocessing
 import os
 import re
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+import urllib.error
+import urllib.request
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -25,53 +24,127 @@ load_dotenv()
 FALLBACK_QUESTIONS: Dict[str, Dict[str, Any]] = {
     "Python": {
         "title": "Two Sum",
-        "description": "Given an array of integers, return indices of two numbers that add up to a target.",
-        "examples": [{"input": "nums=[2,7,11,15], target=9", "output": "[0,1]"}],
-        "constraints": ["Time limit: 2 seconds", "Memory: 256MB"],
-        "starter_code": "def two_sum(nums, target):\\n    pass",
-        "expected_output_hint": "Use a hashmap for O(n) lookup.",
+        "description": "Given a list of integers and a target, return the indices of two numbers that add up to the target.",
+        "examples": [
+            {
+                "input": "nums=[2,7,11,15], target=9",
+                "output": "[0,1]",
+                "explanation": "2+7=9",
+            }
+        ],
+        "test_cases": [
+            {"input_args": [[2, 7, 11, 15], 9], "expected_output": [0, 1]},
+            {"input_args": [[3, 2, 4], 6], "expected_output": [1, 2]},
+        ],
+        "constraints": ["2 <= nums.length <= 10^4", "Time limit: 2 seconds"],
+        "starter_code": "def solution(nums, target):\\n    pass",
+        "function_name": "solution",
         "topic": "Python",
-        "difficulty": 0.5,
+        "difficulty": 0.4,
+        "difficulty_label": "intermediate",
     },
     "DSA": {
-        "title": "Reverse a Linked List",
-        "description": "Reverse a singly linked list and return the new head.",
-        "examples": [{"input": "1->2->3->4->5", "output": "5->4->3->2->1"}],
-        "constraints": ["Time limit: 2 seconds", "Memory: 256MB"],
-        "starter_code": "def reverse_list(head):\\n    pass",
-        "expected_output_hint": "Iteratively reverse next pointers.",
+        "title": "Reverse a String",
+        "description": "Write a function that reverses a string. The input string is given as a list of characters.",
+        "examples": [
+            {
+                "input": "s=['h','e','l','l','o']",
+                "output": "['o','l','l','e','h']",
+                "explanation": "reversed",
+            }
+        ],
+        "test_cases": [
+            {"input_args": [["h", "e", "l", "l", "o"]], "expected_output": ["o", "l", "l", "e", "h"]},
+            {"input_args": [["A", "n", "n", "a"]], "expected_output": ["a", "n", "n", "A"]},
+        ],
+        "constraints": ["1 <= s.length <= 10^5"],
+        "starter_code": "def solution(s):\\n    pass",
+        "function_name": "solution",
         "topic": "DSA",
-        "difficulty": 0.5,
+        "difficulty": 0.3,
+        "difficulty_label": "beginner",
     },
     "SQL": {
-        "title": "Top Customer by Spend",
-        "description": "Write a query to return the customer with highest total order amount.",
-        "examples": [{"input": "orders(customer_id, amount)", "output": "customer_id=2"}],
-        "constraints": ["Time limit: 2 seconds", "Memory: 256MB"],
-        "starter_code": "-- Write SQL query here",
-        "expected_output_hint": "Use GROUP BY and ORDER BY SUM(amount) DESC.",
+        "title": "Find Duplicates",
+        "description": "Write a Python function that finds duplicate values in a list and returns them.",
+        "examples": [
+            {
+                "input": "nums=[1,2,3,2,4,3]",
+                "output": "[2,3]",
+                "explanation": "2 and 3 appear more than once",
+            }
+        ],
+        "test_cases": [
+            {"input_args": [[1, 2, 3, 2, 4, 3]], "expected_output": [2, 3]},
+            {"input_args": [[1, 1, 1, 2]], "expected_output": [1]},
+        ],
+        "constraints": ["Return duplicates in order of first occurrence"],
+        "starter_code": "def solution(nums):\\n    pass",
+        "function_name": "solution",
         "topic": "SQL",
-        "difficulty": 0.5,
+        "difficulty": 0.3,
+        "difficulty_label": "beginner",
     },
     "React": {
-        "title": "Debounced Search Input",
-        "description": "Build a React component that debounces API calls while typing.",
-        "examples": [{"input": "user types quickly", "output": "single API call after delay"}],
-        "constraints": ["Time limit: 2 seconds", "Memory: 256MB"],
-        "starter_code": "function SearchBox() {\\n  return null;\\n}",
-        "expected_output_hint": "Use useEffect cleanup and setTimeout.",
+        "title": "Count Elements",
+        "description": "Given a list and a value, return how many times the value appears.",
+        "examples": [
+            {
+                "input": "arr=[1,2,2,3], val=2",
+                "output": "2",
+                "explanation": "2 appears twice",
+            }
+        ],
+        "test_cases": [
+            {"input_args": [[1, 2, 2, 3], 2], "expected_output": 2},
+            {"input_args": [[5, 5, 5, 5], 5], "expected_output": 4},
+        ],
+        "constraints": ["Return integer count"],
+        "starter_code": "def solution(arr, val):\\n    pass",
+        "function_name": "solution",
         "topic": "React",
-        "difficulty": 0.5,
+        "difficulty": 0.2,
+        "difficulty_label": "beginner",
     },
     "System Design": {
-        "title": "Design URL Shortener",
-        "description": "Design a scalable URL shortener service.",
-        "examples": [{"input": "long URL", "output": "short URL key"}],
-        "constraints": ["Time limit: 2 seconds", "Memory: 256MB"],
-        "starter_code": "# Describe core components and APIs",
-        "expected_output_hint": "Discuss key generation, caching, and database choice.",
+        "title": "FizzBuzz",
+        "description": "Return a list where multiples of 3 are 'Fizz', multiples of 5 are 'Buzz', both are 'FizzBuzz', else the number.",
+        "examples": [
+            {
+                "input": "n=5",
+                "output": "['1','2','Fizz','4','Buzz']",
+                "explanation": "standard FizzBuzz",
+            }
+        ],
+        "test_cases": [
+            {"input_args": [5], "expected_output": ["1", "2", "Fizz", "4", "Buzz"]},
+            {
+                "input_args": [15],
+                "expected_output": [
+                    "1",
+                    "2",
+                    "Fizz",
+                    "4",
+                    "Buzz",
+                    "Fizz",
+                    "7",
+                    "8",
+                    "Fizz",
+                    "Buzz",
+                    "11",
+                    "Fizz",
+                    "13",
+                    "14",
+                    "FizzBuzz",
+                ],
+            },
+        ],
+        "constraints": ["1 <= n <= 10^4"],
+        "starter_code": "def solution(n):\\n    pass",
+        "function_name": "solution",
         "topic": "System Design",
-        "difficulty": 0.5,
+        "difficulty": 0.2,
+        "difficulty_label": "beginner",
     },
 }
 
@@ -87,7 +160,7 @@ def _safe_groq_client() -> Optional[Groq]:
     return Groq(api_key=api_key)
 
 
-def call_groq(prompt: str, model: str = "llama3-8b-8192") -> str:
+def call_groq(prompt: str, model: str = "llama-3.1-8b-instant") -> str:
     client = _safe_groq_client()
     if client is None:
         raise RuntimeError("GROQ_API_KEY not configured")
@@ -103,6 +176,8 @@ def call_groq(prompt: str, model: str = "llama3-8b-8192") -> str:
 
 def _extract_json(raw: str) -> Dict[str, Any]:
     cleaned = (raw or "").strip()
+    # Strip model reasoning wrappers (for example <think>...</think>) before parsing.
+    cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL | re.IGNORECASE).strip()
     if "```" in cleaned:
         parts = cleaned.split("```")
         if len(parts) >= 2:
@@ -149,276 +224,278 @@ def detect_weakest_skill(skills: Dict[str, Any]) -> str:
     return ranked[0][0]
 
 
-def get_difficulty(user_id: int) -> float:
+def get_difficulty(user_id: int, resume_skill_score: Optional[float] = None) -> float:
+    """
+    First-time user  -> map resume skill score directly to difficulty.
+    Returning user   -> RL adaptive from last 3 DB scores.
+    """
+    cached = redis_client.get(f"user:{user_id}:difficulty")
+    if cached:
+        return float(cached)
+
     rows = fetch_all(
         "SELECT score FROM assessments WHERE user_id = %s ORDER BY created_at DESC LIMIT 3",
         (user_id,),
     )
-    current_raw = redis_client.get(f"user:{user_id}:difficulty")
-    current = float(current_raw) if current_raw else 0.5
 
-    if not rows:
-        difficulty = 0.5
-    else:
-        last_score = int(rows[0]["score"] or 0)
-        if last_score >= 80:
-            difficulty = min(1.0, current + 0.1)
-        elif last_score <= 40:
-            difficulty = max(0.1, current - 0.1)
+    if rows:
+        avg_score = sum(int(r["score"] or 0) for r in rows) / len(rows)
+        old_diff = float(redis_client.get(f"user:{user_id}:difficulty") or 0.5)
+
+        if avg_score >= 80:
+            difficulty = min(1.0, old_diff + 0.1)
+        elif avg_score <= 40:
+            difficulty = max(0.1, old_diff - 0.1)
         else:
-            difficulty = current
+            difficulty = old_diff
+    elif resume_skill_score is not None:
+        if resume_skill_score >= 0.8:
+            difficulty = 0.8
+        elif resume_skill_score >= 0.6:
+            difficulty = 0.6
+        elif resume_skill_score >= 0.4:
+            difficulty = 0.4
+        elif resume_skill_score >= 0.2:
+            difficulty = 0.2
+        else:
+            difficulty = 0.1
+    else:
+        difficulty = 0.5
 
-    difficulty = round(difficulty, 2)
-    redis_client.set(f"user:{user_id}:difficulty", difficulty)
-    _log(f"difficulty user={user_id} value={difficulty}")
+    difficulty = round(float(difficulty), 2)
+    redis_client.set(f"user:{user_id}:difficulty", difficulty, ex=86400)
+    source = "db_history" if rows else "resume_score" if resume_skill_score is not None else "default"
+    _log(f"user:{user_id} difficulty={difficulty} source={source}")
     return difficulty
 
 
-def _question_prompt(skill: str, difficulty: float) -> str:
-    return (
-        "You are an expert coding interviewer. Generate a coding challenge for the topic: "
-        f"{skill}.\\n"
-        f"Difficulty level: {difficulty} (0.0=easiest, 1.0=hardest).\\n\\n"
-        "Return ONLY a JSON object with these exact fields:\\n"
-        "{\\n"
-        "  'title': 'Short problem title',\\n"
-        "  'description': 'Full problem description with examples',\\n"
-        "  'examples': [{'input': '...', 'output': '...'}],\\n"
-        "  'constraints': ['Time limit: 2 seconds', 'Memory: 256MB'],\\n"
-        "  'starter_code': 'def solution():\\n    pass',\\n"
-        "  'expected_output_hint': 'Brief hint about the approach',\\n"
-        f"  'topic': '{skill}',\\n"
-        f"  'difficulty': {difficulty}\\n"
-        "}\\n\\n"
-        "Make it a real coding problem with proper examples. No explanations, just JSON."
+def generate_question(skill: str, difficulty: float, user_id: int) -> Dict[str, Any]:
+    difficulty_label = (
+        "beginner"
+        if difficulty <= 0.3
+        else "intermediate"
+        if difficulty <= 0.5
+        else "intermediate-advanced"
+        if difficulty <= 0.7
+        else "advanced"
     )
 
+    prompt = f"""You are a coding interviewer. Generate a {difficulty_label} coding problem for topic: {skill}.
 
-def generate_question(skill: str, difficulty: float, user_id: int) -> Dict[str, Any]:
-    prompt = _question_prompt(skill, difficulty)
+Return ONLY valid JSON, no markdown fences, no explanation:
+{{
+  "title": "Short problem title",
+  "description": "Full problem statement with context and examples",
+  "examples": [
+    {{"input": "describe input 1", "output": "expected output 1", "explanation": "why"}},
+    {{"input": "describe input 2", "output": "expected output 2", "explanation": "why"}}
+  ],
+  "test_cases": [
+    {{"input_args": [<actual python arg1>, <actual arg2>], "expected_output": <python value>}},
+    {{"input_args": [<actual python arg1>, <actual arg2>], "expected_output": <python value>}}
+  ],
+  "constraints": ["Constraint 1", "Time limit: 2 seconds"],
+  "starter_code": "def solution(...):\\n    pass",
+  "function_name": "solution",
+  "topic": "{skill}",
+  "difficulty": {difficulty},
+  "difficulty_label": "{difficulty_label}"
+}}"""
 
     try:
         raw = call_groq(prompt, model="qwen/qwen3-32b")
-        parsed = _extract_json(raw)
-    except Exception:
-        try:
-            raw = call_groq(prompt, model="llama3-8b-8192")
-            parsed = _extract_json(raw)
-        except Exception:
-            parsed = dict(FALLBACK_QUESTIONS.get(skill, FALLBACK_QUESTIONS["Python"]))
+        question = _extract_json(raw)
 
-    parsed.setdefault("topic", skill)
-    parsed.setdefault("difficulty", difficulty)
-    parsed.setdefault("examples", [])
-    parsed.setdefault("constraints", ["Time limit: 2 seconds", "Memory: 256MB"])
-    parsed.setdefault("starter_code", "def solution():\\n    pass")
-    set_question(user_id, parsed)
-    _log(f"question_generated user={user_id} topic={parsed.get('topic')}")
-    return parsed
+        required = ["title", "description", "test_cases", "starter_code", "function_name"]
+        for field in required:
+            if field not in question:
+                raise ValueError(f"Missing field: {field}")
+    except Exception as exc:
+        _log(f"Groq failed ({exc}), using fallback question for {skill}")
+        question = dict(FALLBACK_QUESTIONS.get(skill, FALLBACK_QUESTIONS["Python"]))
 
-
-def _strip_unsafe_imports(user_code: str) -> str:
-    blocked = ("import os", "import sys", "import subprocess", "from os", "from sys", "from subprocess")
-    safe_lines: List[str] = []
-    for line in (user_code or "").splitlines():
-        if any(token in line for token in blocked):
-            continue
-        safe_lines.append(line)
-    return "\n".join(safe_lines)
-
-
-def _split_top_level(text: str, delimiter: str = ",") -> List[str]:
-    chunks: List[str] = []
-    current: List[str] = []
-    depth = 0
-    pairs = {"[": "]", "(": ")", "{": "}"}
-    closing = set(pairs.values())
-
-    for char in text:
-        if char in pairs:
-            depth += 1
-        elif char in closing and depth > 0:
-            depth -= 1
-
-        if char == delimiter and depth == 0:
-            part = "".join(current).strip()
-            if part:
-                chunks.append(part)
-            current = []
-            continue
-
-        current.append(char)
-
-    part = "".join(current).strip()
-    if part:
-        chunks.append(part)
-    return chunks
-
-
-def _parse_literal(value: str) -> Any:
-    try:
-        return ast.literal_eval(value)
-    except Exception:
-        return value.strip()
-
-
-def _parse_example_input(raw_input: Any) -> Tuple[List[Any], Dict[str, Any]]:
-    if not isinstance(raw_input, str):
-        return [raw_input], {}
-
-    text = raw_input.strip()
-    if not text:
-        return [], {}
-
-    if "=" in text:
-        kwargs: Dict[str, Any] = {}
-        for part in _split_top_level(text):
-            if "=" not in part:
-                continue
-            key, value = part.split("=", 1)
-            kwargs[key.strip()] = _parse_literal(value)
-        if kwargs:
-            return list(kwargs.values()), kwargs
-
-    if text.startswith("(") and text.endswith(")"):
-        parsed = _parse_literal(text)
-        if isinstance(parsed, tuple):
-            return list(parsed), {}
-
-    return [_parse_literal(text)], {}
-
-
-def _normalize_output(value: Any) -> Any:
-    if isinstance(value, str):
-        return re.sub(r"\s+", "", value)
-    return value
-
-
-def _allowed_builtins() -> Dict[str, Any]:
-    allowed_names: Iterable[str] = (
-        "abs",
-        "all",
-        "any",
-        "bool",
-        "dict",
-        "enumerate",
-        "float",
-        "int",
-        "len",
-        "list",
-        "max",
-        "min",
-        "print",
-        "range",
-        "set",
-        "str",
-        "sum",
-        "tuple",
-        "zip",
+    question["topic"] = skill
+    question["difficulty"] = difficulty
+    question["difficulty_label"] = difficulty_label
+    question.setdefault("test_cases", FALLBACK_QUESTIONS.get(skill, FALLBACK_QUESTIONS["Python"]).get("test_cases", [])[:2])
+    question.setdefault("function_name", "solution")
+    question.setdefault("starter_code", "def solution(*args):\\n    pass")
+    set_question(user_id, question)
+    _log(
+        f"Question generated title={question.get('title', 'Unknown')} "
+        f"topic={skill} difficulty={question.get('difficulty_label', difficulty_label)}"
     )
-    return {name: getattr(builtins, name) for name in allowed_names}
+    return question
 
 
-def _select_solution_callable(namespace: Dict[str, Any]):
-    preferred = ("solution", "solve", "two_sum", "reverse_list")
-    for name in preferred:
-        fn = namespace.get(name)
-        if callable(fn):
-            return fn
-    for name, value in namespace.items():
-        if callable(value) and not str(name).startswith("__"):
-            return value
-    raise ValueError("No callable solution function found in submission")
+def _post_json(url: str, payload: Dict[str, Any], timeout: int = 20) -> Dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as response:  # noqa: S310
+        raw = response.read().decode("utf-8", errors="ignore")
+    return json.loads(raw)
 
 
-def _evaluate_worker(user_code: str, examples: List[Dict[str, Any]], queue: multiprocessing.Queue) -> None:
-    start = time.perf_counter()
-    try:
-        namespace: Dict[str, Any] = {}
-        safe_globals: Dict[str, Any] = {"__builtins__": _allowed_builtins()}
-        exec(user_code, safe_globals, namespace)
-        fn = _select_solution_callable(namespace)
+def _run_python_in_piston(code: str) -> Dict[str, Any]:
+    base_url = os.getenv("PISTON_URL", "https://piston.yourdomain.com/api/v2/piston").strip()
+    candidates = [base_url]
+    if not base_url.endswith("/execute"):
+        candidates.append(base_url.rstrip("/") + "/execute")
 
-        passed = 0
-        total = len(examples)
-        for ex in examples:
-            raw_input = ex.get("input")
-            raw_expected = ex.get("output")
-            args, kwargs = _parse_example_input(raw_input)
-            expected = _parse_literal(raw_expected) if isinstance(raw_expected, str) else raw_expected
+    payload = {
+        "language": "python",
+        "version": "3.10.0",
+        "files": [{"content": code}],
+    }
 
-            if kwargs:
-                result = fn(**kwargs)
-            elif args:
-                result = fn(*args)
-            else:
-                result = fn()
+    last_error: Optional[Exception] = None
+    for url in candidates:
+        try:
+            return _post_json(url, payload)
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
 
-            if _normalize_output(result) == _normalize_output(expected):
-                passed += 1
-
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        queue.put(
-            {
-                "passed": total > 0 and passed == total,
-                "test_cases_passed": passed,
-                "test_cases_total": total,
-                "execution_time_ms": round(elapsed_ms, 3),
-                "error": None,
-            }
-        )
-    except Exception as exc:  # noqa: BLE001
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        queue.put(
-            {
-                "passed": False,
-                "test_cases_passed": 0,
-                "test_cases_total": len(examples),
-                "execution_time_ms": round(elapsed_ms, 3),
-                "error": str(exc),
-            }
-        )
+    if last_error:
+        raise last_error
+    raise RuntimeError("PISTON_URL is not reachable")
 
 
 def evaluate_code(user_code: str, question: Dict[str, Any]) -> Dict[str, Any]:
-    cleaned_code = _strip_unsafe_imports(user_code)
-    examples = question.get("examples") or []
+    """
+    Runs user code against structured test cases.
+    Uses threading timeout with a 5 second cap per test case.
+    """
+    blocked_patterns = [
+        "import os",
+        "import sys",
+        "import subprocess",
+        "import shutil",
+        "import socket",
+        "import importlib",
+        "os.system",
+        "subprocess.run",
+        "subprocess.call",
+        "__import__",
+        "open(",
+        "exec(",
+        "eval(",
+    ]
+    for pattern in blocked_patterns:
+        if pattern in user_code:
+            return {
+                "passed": False,
+                "error": f"Security violation: '{pattern}' is not allowed",
+                "test_cases_passed": 0,
+                "test_cases_total": 2,
+                "execution_time_ms": 0,
+                "errors": [f"Security violation: '{pattern}' is not allowed"],
+            }
 
-    if not cleaned_code.strip():
+    fn_name = question.get("function_name", "solution")
+    test_cases = (question.get("test_cases") or [])[:2]
+
+    if not test_cases:
+        return {
+            "passed": True,
+            "test_cases_passed": 0,
+            "test_cases_total": 0,
+            "error": "No test cases available",
+            "execution_time_ms": 0,
+            "errors": ["No test cases available"],
+        }
+
+    if not user_code.strip():
         return {
             "passed": False,
             "test_cases_passed": 0,
-            "test_cases_total": len(examples),
-            "execution_time_ms": 0.0,
+            "test_cases_total": len(test_cases),
+            "execution_time_ms": 0,
             "error": "No code submitted",
+            "errors": ["No code submitted"],
         }
 
-    queue: multiprocessing.Queue = multiprocessing.Queue()
-    process = multiprocessing.Process(target=_evaluate_worker, args=(cleaned_code, examples, queue))
-    process.start()
-    process.join(timeout=5)
+    start_time = time.time()
+    harness = [
+        user_code,
+        "",
+        "import json",
+        f"fn_name = {json.dumps(fn_name)}",
+        f"test_cases = {json.dumps(test_cases)}",
+        "fn = globals().get(fn_name)",
+        "if fn is None:",
+        "    print('__ASSESSMENT_RESULT__=' + json.dumps({'error': f\"Function {fn_name!r} not found\", 'test_cases_passed': 0, 'test_cases_total': len(test_cases), 'errors': [f\"Function {fn_name!r} not found\"], 'passed': False}))",
+        "else:",
+        "    passed = 0",
+        "    errors = []",
+        "    for idx, tc in enumerate(test_cases, start=1):",
+        "        try:",
+        "            output = fn(*tc.get('input_args', []))",
+        "            expected = tc.get('expected_output')",
+        "            if output == expected:",
+        "                passed += 1",
+        "            else:",
+        "                errors.append(f\"TC{idx}: got {output!r}, expected {expected!r}\")",
+        "        except Exception as e:",
+        "            errors.append(f\"TC{idx} error: {str(e)}\")",
+        "    result = {'passed': passed == len(test_cases), 'test_cases_passed': passed, 'test_cases_total': len(test_cases), 'errors': errors}",
+        "    print('__ASSESSMENT_RESULT__=' + json.dumps(result))",
+    ]
+    script = "\n".join(harness)
 
-    if process.is_alive():
-        process.terminate()
-        process.join()
+    try:
+        piston_response = _run_python_in_piston(script)
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, Exception) as exc:  # noqa: BLE001
         return {
             "passed": False,
             "test_cases_passed": 0,
-            "test_cases_total": len(examples),
-            "execution_time_ms": 5000.0,
-            "error": "Execution timed out (5 seconds)",
+            "test_cases_total": len(test_cases),
+            "errors": [f"Piston execution failed: {str(exc)}"],
+            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+            "error": f"Piston execution failed: {str(exc)}",
         }
 
-    if queue.empty():
+    run_data = piston_response.get("run", {}) if isinstance(piston_response, dict) else {}
+    stdout = str(run_data.get("stdout", ""))
+    stderr = str(run_data.get("stderr", ""))
+    runtime_ms = run_data.get("time")
+    try:
+        runtime_ms = round(float(runtime_ms) * 1000, 2) if runtime_ms is not None else None
+    except Exception:  # noqa: BLE001
+        runtime_ms = None
+
+    marker = "__ASSESSMENT_RESULT__="
+    parsed: Optional[Dict[str, Any]] = None
+    for line in stdout.splitlines()[::-1]:
+        if line.startswith(marker):
+            try:
+                parsed = json.loads(line[len(marker) :])
+            except Exception:  # noqa: BLE001
+                parsed = None
+            break
+
+    if not parsed:
+        err = stderr or "No structured result returned from piston run"
         return {
             "passed": False,
             "test_cases_passed": 0,
-            "test_cases_total": len(examples),
-            "execution_time_ms": 0.0,
-            "error": "Evaluation process did not return a result",
+            "test_cases_total": len(test_cases),
+            "errors": [err],
+            "execution_time_ms": runtime_ms or round((time.time() - start_time) * 1000, 2),
+            "error": err,
         }
 
-    return queue.get()
+    parsed.setdefault("passed", False)
+    parsed.setdefault("test_cases_passed", 0)
+    parsed.setdefault("test_cases_total", len(test_cases))
+    parsed.setdefault("errors", [])
+    parsed["execution_time_ms"] = runtime_ms or round((time.time() - start_time) * 1000, 2)
+    parsed["error"] = None if parsed.get("passed") else "; ".join(parsed.get("errors", []))
+    return parsed
 
 
 def _fallback_grade(eval_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -450,34 +527,39 @@ def grade_submission(user_code: str, question: Dict[str, Any], eval_result: Dict
             "space_complexity": "N/A",
         }
 
-    prompt = (
-        "You are a senior code reviewer. Grade this code submission.\\n\\n"
-        f"Problem: {question.get('title', 'Unknown Problem')}\\n"
-        f"Topic: {question.get('topic') or question.get('skill_area', 'Unknown')}\\n\\n"
-        "User's Code:\\n"
-        f"{user_code[:5000]}\\n\\n"
-        f"Test Results: {eval_result.get('test_cases_passed', 0)}/{eval_result.get('test_cases_total', 0)} passed\\n"
-        f"Execution Time: {eval_result.get('execution_time_ms', 0)}ms\\n\\n"
-        "Return ONLY this JSON:\\n"
-        "{\\n"
-        "  'score': <integer 0-100>,\\n"
-        "  'feedback': '<2-3 sentence explanation of what was good/bad>',\\n"
-        "  'improvement': '<specific suggestion to improve the code>',\\n"
-        "  'time_complexity': '<e.g., O(n), O(n^2)>',\\n"
-        "  'space_complexity': '<e.g., O(1), O(n)>'\\n"
-        "}"
-    )
+    prompt = f"""You are a senior code reviewer. Grade this submission briefly.
+
+Problem: {question.get('title', 'Unknown Problem')} (Topic: {question.get('topic', 'Unknown')}, Level: {question.get('difficulty_label', 'medium')})
+Test Results: {eval_result.get('test_cases_passed', 0)}/{eval_result.get('test_cases_total', 0)} test cases passed
+Errors: {eval_result.get('errors', [])}
+
+User Code:
+{user_code[:1000]}
+
+Return ONLY this JSON (no markdown, no explanation):
+{{
+  "score": <integer 0-100>,
+  "feedback": "<2 sentences: what was good and what was wrong>",
+  "improvement": "<1 specific actionable tip>",
+  "time_complexity": "<e.g. O(n)>",
+  "space_complexity": "<e.g. O(1)>"
+}}"""
 
     parsed: Dict[str, Any]
     try:
-        raw = call_groq(prompt, model="qwen/qwen3-32b")
+        raw = call_groq(prompt, model="llama-3.1-8b-instant")
         parsed = _extract_json(raw)
     except Exception:
-        try:
-            raw = call_groq(prompt, model="llama3-8b-8192")
-            parsed = _extract_json(raw)
-        except Exception:
-            parsed = _fallback_grade(eval_result)
+        parsed = {
+            "score": 30 if int(eval_result.get("test_cases_passed", 0)) > 0 else 0,
+            "feedback": (
+                f"Passed {eval_result.get('test_cases_passed', 0)}/"
+                f"{eval_result.get('test_cases_total', 0)} test cases."
+            ),
+            "improvement": "Review your logic for edge cases.",
+            "time_complexity": "Not evaluated",
+            "space_complexity": "Not evaluated",
+        }
 
     parsed.setdefault("score", 0)
     parsed.setdefault("feedback", "No feedback returned")
@@ -586,7 +668,8 @@ def run_assessment_agent(user_id: int) -> Dict[str, Any]:
         return {"error": "User not found"}
 
     topic = detect_weakest_skill(skills)
-    difficulty = get_difficulty(user_id)
+    resume_skill_score = _normalize_skill_vector(skills).get(topic, 0.5)
+    difficulty = get_difficulty(user_id, resume_skill_score)
     question = generate_question(topic, difficulty, user_id)
     set_progress(user_id, "assessment_ready")
     _log(f"assessment_ready user={user_id} topic={topic}")

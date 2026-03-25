@@ -267,3 +267,67 @@
 	- second `POST /api/submit/7` without new question -> 400 `No active assessment`
 	- Redis checks: `user:7:progress=assessment_complete`, `leaderboard score for 7` updated
 	- PostgreSQL check: new `assessments` row inserted for user 7
+
+## Assessment Agent Hotfix Plan (Bug1-Bug4)
+
+### Current Gaps
+- First-time users default to `0.5` difficulty instead of resume-based weakest-skill difficulty.
+- Question model routing is cost-heavy (`qwen/qwen3-32b`) and question payload lacks structured executable test cases.
+- Code evaluator relies primarily on display-style `examples` instead of deterministic `test_cases` input args.
+- Grader uses a larger model than needed for text feedback.
+
+### Target Behavior
+- First-time difficulty comes from weakest resume skill score; returning users adapt via last assessments.
+- Question generation uses `qwen-2.5-coder-32b`, returns `test_cases`, `function_name`, and `difficulty_label`.
+- Evaluator executes against `test_cases` with strict safety checks and 5s timeout.
+- Grader uses `llama3-8b-8192` with score cap when tests fail.
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| backend/agents/assessment_agent.py | Hotfix implementation | update difficulty source, model routing, question schema, evaluator, grader, fallback bank |
+
+### Execution Checklist
+- [x] Bug1: update `get_difficulty(user_id, resume_skill_score)` and pass weakest-skill resume score from `run_assessment_agent`
+- [x] Bug2: switch question generation model to `qwen-2.5-coder-32b` and include executable `test_cases`
+- [x] Bug3: update evaluator to use `question.test_cases` with security checks and timeout
+- [x] Bug4: switch grading model path to `llama3-8b-8192`
+- [x] Validate compile and endpoint behavior for first-time difficulty + submit flow
+
+### Hotfix Review Notes
+- `backend/agents/assessment_agent.py` now maps first-time difficulty from weakest resume skill and stores it in Redis with TTL.
+- `run_assessment_agent()` now passes weakest-skill resume score into `get_difficulty()`.
+- `generate_question()` now uses `qwen-2.5-coder-32b`, enforces required fields, and returns structured `test_cases` + `function_name` + `difficulty_label`.
+- `evaluate_code()` now validates security patterns and executes against `test_cases` (max 2) with 5-second timeout per case.
+- `grade_submission()` now routes grading to `llama3-8b-8192` and preserves score-cap behavior when tests fail.
+- Runtime checks (Docker backend):
+	- user 9001 first-time assessment -> `topic=System Design`, `difficulty=0.1`, Redis `user:9001:difficulty=0.1`
+	- submit for user 9001 -> 200 with test-case metrics + Redis `progress=assessment_complete` + leaderboard updated
+
+## Piston Evaluation Integration Plan
+
+### Target Behavior
+- Code execution/evaluation should run through Piston API instead of local `exec` sandbox.
+- Piston base URL must be read from environment variable `PISTON_URL`.
+- Environment template should include:
+	- `PISTON_URL=https://piston.yourdomain.com/api/v2/piston`
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| backend/agents/assessment_agent.py | External code execution | replace local test execution path with Piston API evaluation flow using env URL |
+| .env.example | Env template | add `PISTON_URL` sample entry |
+
+### Execution Checklist
+- [x] Add env-driven Piston endpoint handling in assessment agent
+- [x] Route test-case execution through Piston and parse structured result
+- [x] Keep security checks and result shape compatible with existing grader flow
+- [x] Add `PISTON_URL` entry to `.env.example`
+- [x] Run compile checks for backend agent
+
+### Review Notes
+- `evaluate_code()` in `backend/agents/assessment_agent.py` now executes submissions through Piston API using `PISTON_URL` from environment.
+- Piston integration posts Python harness code with structured test cases and parses a marker-based JSON result from stdout.
+- Existing response contract for grader flow is preserved (`passed`, `test_cases_passed`, `test_cases_total`, `errors`, `execution_time_ms`, `error`).
+- Environment template now includes `PISTON_URL=https://piston.yourdomain.com/api/v2/piston`.
+- Syntax verification passed via `python -m compileall agents/assessment_agent.py`.
