@@ -186,3 +186,84 @@
 - Docker fullstack startup verified with `docker compose up --build -d` and HTTP checks:
 	- `http://localhost:3000` -> 200
 	- `http://localhost:8000/health` -> 200
+
+## Auth Flow Bugfix Plan (Register/Login + Onboarding Resume)
+
+### Context Map
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| frontend/src/lib/api.ts | API result normalization | surface backend status and error payload consistently |
+| frontend/src/pages/ProfileBuilder.tsx | register error UI | show backend root-cause message (`detail`/`error`) |
+| frontend/src/pages/ProfileManual.tsx | manual completion errors | same error normalization as register step 1 |
+| frontend/src/pages/Login.tsx | login error UI | show precise backend error message for user-not-found/invalid auth |
+| backend/routers/auth.py | auth response shape | ensure login/register return clear error semantics and duplicate detection |
+
+### Risks
+- [ ] Regression in existing onboarding success path
+- [ ] Frontend assumes old API response shape in another page
+- [ ] Inconsistent error contract between endpoints
+
+### Execution Checklist
+- [x] Verify frontend onboarding resume route calls backend register endpoint
+- [x] Normalize backend error payload handling in frontend API layer/pages
+- [x] Confirm backend duplicate-email check and status code behavior
+- [x] Run targeted runtime tests: duplicate register, valid register, invalid login, valid login
+- [x] Document final root cause and fix summary
+
+### Review Notes
+- Confirmed route wiring: onboarding resume page posts to `/api/register`.
+- Root cause fixed: backend duplicate/login errors were sent as `detail`, while frontend only checked `error` and often showed generic failures.
+- Backend now returns HTTP 404 for missing user in login and user lookup, preserving explicit status semantics.
+- Frontend API layer now throws non-2xx responses with normalized backend message extraction (`error`/`detail`/`message`) and includes HTTP code in error text.
+- Runtime verification against Docker backend on port 8000:
+	- valid register (with completion fields) -> 200
+	- duplicate register (same email) -> 409 with `{"detail":"Email already registered"}`
+	- valid login (existing user) -> 200
+	- missing login (non-existent user) -> 404 with `{"detail":"User not found"}`
+
+## Assessment Agent Plan (Spec-Aligned)
+
+### Current State
+- `backend/agents/assessment_agent.py` has basic adaptive question generation and grading but does not implement the full event-driven flow from profile vector, sandboxed execution, difficulty persistence, Redis event publish, and submission orchestration requested in the spec.
+- `backend/routers/assessment.py` currently wires to partial functions and stores assessment rows directly in router logic.
+
+### Target State
+- `assessment_agent.py` becomes the single orchestration layer with these entry points:
+	- `run_assessment_agent(user_id)` for question generation.
+	- `submit_assessment(user_id, user_code, time_taken, hints_used)` for evaluation, grading, persistence, Redis updates, and event emission.
+- `routers/assessment.py` delegates generation/submission to agent methods and keeps path-generation endpoint unchanged.
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| backend/agents/assessment_agent.py | Full assessment agent implementation | weakness detector, epsilon-greedy difficulty, Groq question/grade, exec sandbox, DB+Redis save, publish event |
+| backend/routers/assessment.py | Route wiring | call `run_assessment_agent` and `submit_assessment` instead of inline logic |
+
+### Execution Checklist
+- [x] Implement `detect_weakest_skill()` with all-above-0.7 second-lowest behavior
+- [x] Implement `get_difficulty()` using last 3 scores + Redis difficulty key
+- [x] Implement `generate_question()` with Groq JSON parsing + fallback questions + Redis cache
+- [x] Implement `evaluate_code()` using restricted `exec()` and 5s timeout
+- [x] Implement `grade_submission()` with score capping and JSON parsing fallback
+- [x] Implement `save_assessment()` with DB insert, weighted skill update, progress, leaderboard, and publish
+- [x] Implement `run_assessment_agent()` and `submit_assessment()` orchestration
+- [x] Rewire `routers/assessment.py` to agent entry points
+- [x] Run compile diagnostics + targeted API checks
+
+### Review Notes
+- Replaced `backend/agents/assessment_agent.py` with full orchestration-based implementation including:
+	- weakest-skill detection from mixed skill representations
+	- epsilon-greedy style difficulty adjustment using Redis persisted difficulty
+	- Groq-generated adaptive questions with model fallback and hardcoded fallback bank
+	- 5-second sandboxed `exec()` evaluation via subprocess
+	- LLM-based grading with fallback and failed-evaluation score cap
+	- DB persistence, weighted skill update, Redis progress/leaderboard updates, and `user_assessment_done` publish
+- Updated `backend/routers/assessment.py` to delegate question generation and submission handling to agent entry points.
+- Verification run results (Docker backend on :8000):
+	- `GET /api/assessment/7` -> 200 with generated question payload
+	- `POST /api/submit/7` -> 200 with score/feedback/complexity/test-case fields and `next: learning_path`
+	- second `POST /api/submit/7` without new question -> 400 `No active assessment`
+	- Redis checks: `user:7:progress=assessment_complete`, `leaderboard score for 7` updated
+	- PostgreSQL check: new `assessments` row inserted for user 7

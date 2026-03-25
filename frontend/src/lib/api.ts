@@ -14,6 +14,7 @@ export type LoginResponse = {
   skills?: Record<string, string>;
   message?: string;
   error?: string;
+  detail?: string;
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -28,6 +29,14 @@ async function parseJsonSafe(res: Response): Promise<any> {
   } catch {
     return null;
   }
+}
+
+function extractBackendError(data: any, fallback: string): string {
+  const message = data?.error || data?.detail || data?.message;
+  if (typeof message === 'string' && message.trim()) {
+    return message;
+  }
+  return fallback;
 }
 
 export async function registerUser(payload: RegisterPayload) {
@@ -46,8 +55,9 @@ export async function registerUser(payload: RegisterPayload) {
     body: form,
   });
   const data = await parseJsonSafe(res);
-  if (!res.ok && !data) {
-    throw new Error(`Register failed (${res.status})`);
+  if (!res.ok) {
+    const message = extractBackendError(data, `Register failed (${res.status})`);
+    throw new Error(`${message} [${res.status}]`);
   }
   return data;
 }
@@ -62,8 +72,9 @@ export async function loginUser(email: string, password: string): Promise<LoginR
     body: form,
   });
   const data = await parseJsonSafe(res);
-  if (!res.ok && !data) {
-    throw new Error(`Login failed (${res.status})`);
+  if (!res.ok) {
+    const message = extractBackendError(data, `Login failed (${res.status})`);
+    throw new Error(`${message} [${res.status}]`);
   }
   return data;
 }

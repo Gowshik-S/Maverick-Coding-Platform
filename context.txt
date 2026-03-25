@@ -1,0 +1,221 @@
+Maverick Coding Platform - Agent Context Memory
+Last updated: 2026-03-26
+
+1) Project Overview
+- Monorepo with FastAPI backend + React/Vite frontend + PostgreSQL + Redis.
+- Goal: AI-assisted coding platform with resume-based onboarding, adaptive assessments,
+  learning-path generation, leaderboard, hackathon workflows, and admin stats.
+- Repo info:
+  - Name: Maverick-Coding-Platform
+  - Owner: Gowshik-S
+  - Current branch: master
+  - Default branch: main
+
+2) High-Level Architecture
+- Frontend (React + Vite): User onboarding, login, dashboard, leaderboard UX.
+- Backend (FastAPI): Auth/register, assessment, recommendation, leaderboard,
+  hackathon, admin APIs.
+- PostgreSQL: System of record for users, assessments, learning paths, hackathons,
+  submissions, badges.
+- Redis: Fast state for progress events, current question cache, leaderboard sorted set.
+- Groq LLM: Optional enrichment for skill extraction/question generation/grading/path;
+  deterministic fallback logic is implemented when GROQ_API_KEY is absent.
+- OCR stack: pytesseract + poppler + pillow + pymupdf + pdf2image for scanned resumes.
+
+3) Workspace Structure (important paths)
+- Root:
+  - README.md
+  - TASK.md
+  - docker-compose.yml
+  - sample_resume.txt
+  - sample_resume_2.txt
+  - ws_test.py
+- Backend:
+  - backend/main.py
+  - backend/requirements.txt
+  - backend/Dockerfile
+  - backend/db/postgres.py
+  - backend/db/redis_client.py
+  - backend/db/schema.sql
+  - backend/routers/auth.py
+  - backend/routers/assessment.py
+  - backend/routers/leaderboard.py
+  - backend/routers/hackathon.py
+  - backend/routers/admin.py
+  - backend/agents/profile_agent.py
+  - backend/agents/assessment_agent.py
+  - backend/agents/recommender_agent.py
+  - backend/agents/hackathon_agent.py
+  - backend/agents/tracker_agent.py
+  - backend/utils/resume_parser.py
+  - backend/utils/completeness_checker.py
+- Frontend:
+  - frontend/package.json
+  - frontend/vite.config.ts
+  - frontend/Dockerfile
+  - frontend/src/App.tsx
+  - frontend/src/lib/api.ts
+  - frontend/src/lib/session.ts
+  - frontend/src/state/onboarding.ts
+  - frontend/src/pages/Landing.tsx
+  - frontend/src/pages/Register.tsx
+  - frontend/src/pages/ProfileBuilder.tsx
+  - frontend/src/pages/ProfileManual.tsx
+  - frontend/src/pages/ProfileSuccess.tsx
+  - frontend/src/pages/Login.tsx
+  - frontend/src/pages/Dashboard.tsx
+- Planning/notes:
+  - tasks/todo.md
+  - tasks/lessons.md
+
+4) Runtime/Infra
+- docker-compose services:
+  - backend: 8000 -> FastAPI app
+  - frontend: 3000 -> Vite dev server
+  - postgres: 5432
+  - redis: 6379
+- Backend container env:
+  - GROQ_API_KEY
+  - POSTGRES_URL=postgresql://admin:admin123@postgres:5432/coding_platform
+  - REDIS_URL=redis://redis:6379
+- Frontend container env:
+  - VITE_API_BASE_URL (optional explicit base URL)
+  - VITE_DEV_PROXY_TARGET=http://backend:8000
+
+5) Backend App Wiring
+- backend/main.py
+  - Includes routers with /api prefix:
+    - auth
+    - assessment
+    - leaderboard
+    - hackathon
+    - admin
+  - Startup:
+    - wait_for_postgres()
+    - initialize_schema()
+    - redis ping (non-fatal)
+  - Endpoints:
+    - GET /
+    - GET /health
+
+6) Database Model (backend/db/schema.sql)
+- users
+  - id, name, email UNIQUE, password_hash, resume_text, skills JSONB, created_at
+- assessments
+  - per submission score/feedback/improvement + metadata
+- learning_paths
+  - one per user (user_id UNIQUE), path JSONB
+- hackathons
+- hackathon_submissions
+- badges
+
+7) Core API Surface (current)
+- Auth/Profile:
+  - POST /api/register
+  - POST /api/login
+  - GET /api/user/{user_id}
+- Assessment:
+  - GET /api/assessment/{user_id}
+  - POST /api/submit/{user_id}
+  - GET /api/learning-path/{user_id}
+- Leaderboard:
+  - GET /api/leaderboard
+  - WS /api/ws/{user_id}
+- Hackathon:
+  - POST /api/hackathon
+  - GET /api/hackathon
+  - POST /api/hackathon/{hackathon_id}/submit
+  - GET /api/hackathon/{hackathon_id}/submissions
+- Admin:
+  - GET /api/admin/stats
+  - GET /api/admin/users
+  - GET /api/admin/stagnation/{user_id}
+
+8) Auth and Onboarding Flow (important behavior)
+- Frontend route flow:
+  - /register -> /onboarding/resume -> /onboarding/manual (optional) -> /onboarding/success
+- Register API behavior:
+  - checks existing email in users table
+  - if exists: HTTP 409 detail="Email already registered"
+  - parses resume text (txt/pdf/docx/image, OCR if needed)
+  - if incomplete profile and no extra fields:
+    - returns needs_more_info with missing fields/questions
+  - if complete or extra fields supplied:
+    - inserts user, runs profile skill extraction, returns user_id and skills
+- Login API behavior:
+  - finds user by email
+  - if missing: HTTP 404 detail="User not found"
+  - if found: returns user_id/name/skills
+  - note: password verification is currently stubbed (not enforced yet)
+
+9) Frontend Integration Details
+- frontend/src/App.tsx
+  - Defines routes and protected dashboard wrapper using local session.
+- frontend/src/lib/api.ts
+  - registerUser() and loginUser() call backend endpoints.
+  - Non-2xx responses now throw with normalized backend message from
+    error/detail/message and include HTTP code.
+- frontend/src/lib/session.ts
+  - localStorage key: maverick_user_session
+- frontend/src/state/onboarding.ts
+  - in-memory onboarding draft/resume/registerResponse state across pages.
+
+10) Agents and Utility Responsibilities
+- profile_agent.py
+  - keyword skill extraction + optional Groq analysis + DB skill persistence.
+- assessment_agent.py
+  - adaptive difficulty + question generation + grading.
+- recommender_agent.py
+  - 4-week learning path generation from weak skills + assessments.
+- hackathon_agent.py
+  - evaluates hackathon submissions.
+- tracker_agent.py
+  - detects score stagnation.
+- resume_parser.py
+  - text extraction for txt/docx/pdf/image + OCR paths.
+- completeness_checker.py
+  - profile completeness checks + missing field question spec.
+
+11) Recent Verified Status (session snapshots)
+- OCR runtime verified inside backend container:
+  - tesseract present
+  - poppler pdftoppm present
+  - pytesseract smoke extraction works
+- Auth/register root-cause fix verified against running backend:
+  - valid register with completion fields: HTTP 200
+  - duplicate register: HTTP 409 with detail message
+  - existing-user login: HTTP 200
+  - missing-user login: HTTP 404 with detail message
+- Frontend/backend linkage:
+  - /onboarding/resume page is linked to backend POST /api/register.
+
+12) Known Gaps / Technical Debt
+- Login password is placeholder (no hash/verify enforcement yet).
+- Some endpoints still return {"error": ...} with 200 rather than HTTPException
+  (for example parts of assessment/hackathon), so error-contract consistency can
+  be further standardized.
+- Redis/DB failures are partially tolerated for startup health route simplicity.
+- LLM outputs rely on JSON extraction; fallbacks exist but should be monitored.
+
+13) Common Run Commands
+- Local backend (from backend/):
+  - ..\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+- Local frontend (from frontend/):
+  - npm install
+  - npm run dev
+- Full stack Docker (from root):
+  - docker compose up --build
+- Stop:
+  - docker compose down
+
+14) Important Conventions
+- Fallback deterministic behavior is explicitly marked in code comments as
+  hardcoded/stub.
+- Backend uses psycopg2 direct SQL helpers and Redis wrapper helpers (no ORM).
+- Frontend assumes JSON API responses; parseJsonSafe used to avoid hard crashes.
+- Route prefix standard: /api for HTTP and websocket endpoints (except / and /health).
+
+15) Suggested Future Context Additions
+- Add explicit API contract table with status codes per endpoint.
+- Add test matrix and postman/newman scripts location if created.
+- Add deployment environment notes (prod/staging URLs, secrets management).

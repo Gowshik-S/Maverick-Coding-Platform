@@ -28,7 +28,7 @@ export default function Login() {
         navigate('/dashboard');
         return;
       }
-      setError(data?.error || 'Login failed.');
+      setError(data?.error || data?.detail || 'Login failed.');
     } catch (err: any) {
       setError(err.message || 'Login failed.');
     } finally {

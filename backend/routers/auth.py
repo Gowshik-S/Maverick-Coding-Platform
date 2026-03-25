@@ -86,7 +86,7 @@ async def login(
         (email,),
     )
     if not user:
-        return {"error": "User not found"}
+        raise HTTPException(status_code=404, detail="User not found")
     return {
         "user_id": user["id"],
         "name": user["name"],
@@ -102,5 +102,5 @@ async def get_user(user_id: int):
         (user_id,),
     )
     if not user:
-        return {"error": "User not found"}
+        raise HTTPException(status_code=404, detail="User not found")
     return dict(user)

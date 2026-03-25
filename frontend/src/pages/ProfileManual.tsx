@@ -51,7 +51,7 @@ export default function ProfileManual() {
         return;
       }
 
-      setError(response?.error || 'Could not complete profile setup.');
+      setError(response?.error || response?.detail || 'Could not complete profile setup.');
     } catch (err: any) {
       setError(err.message || 'Request failed.');
     } finally {
