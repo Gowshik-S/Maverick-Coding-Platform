@@ -6,7 +6,7 @@ from redis.exceptions import RedisError
 
 from db.postgres import initialize_schema, wait_for_postgres
 from db.redis_client import client as redis_client
-from routers import admin, assessment, auth, hackathon, leaderboard, recommender
+from routers import admin, assessment, auth, hackathon, leaderboard, recommender, tracker
 from utils.resource_scraper import fetch_resources
 
 app = FastAPI(
@@ -29,6 +29,7 @@ app.include_router(leaderboard.router, prefix="/api")
 app.include_router(hackathon.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(recommender.router)
+app.include_router(tracker.router, prefix="/api")
 
 
 @app.on_event("startup")

@@ -33,6 +33,8 @@ export type LoginResponse = {
 };
 
 export type AssessmentQuestion = {
+  status?: 'generating' | 'ready';
+  message?: string;
   title?: string;
   description?: string;
   examples?: Array<{ input?: string; output?: string; explanation?: string }>;
@@ -55,6 +57,17 @@ export type AssessmentSubmitResponse = {
   evaluation_error?: string;
   topic?: string;
   difficulty?: number;
+  next_difficulty_suggestion?: number;
+  can_attempt_next?: boolean;
+  can_skip?: boolean;
+  next?: string;
+};
+
+export type AssessmentNextStepResponse = {
+  next: 'assessment' | 'learning_path';
+  message?: string;
+  question?: AssessmentQuestion;
+  learning_path?: Array<Record<string, unknown>>;
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -119,6 +132,20 @@ export async function getLearningPath(userId: number): Promise<any> {
   return await throwIfNotOk(res, 'Failed to load learning path');
 }
 
+export async function getLearningPathStatus(userId: number): Promise<any> {
+  const res = await fetch(buildUrl(`/api/learning-path/${userId}/status`));
+  return await throwIfNotOk(res, 'Failed to load learning path status');
+}
+
+export async function generateLearningPath(userId: number, force = true): Promise<any> {
+  const res = await fetch(buildUrl(`/api/learning-path/${userId}/generate`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force }),
+  });
+  return await throwIfNotOk(res, 'Failed to generate learning path');
+}
+
 export async function getLeaderboard(): Promise<any[]> {
   const res = await fetch(buildUrl('/api/leaderboard'));
   return await throwIfNotOk(res, 'Failed to load leaderboard');
@@ -141,4 +168,16 @@ export async function submitAssessment(
     body: JSON.stringify({ code, time_taken: timeTaken, hints_used: hintsUsed }),
   });
   return await throwIfNotOk(res, 'Failed to submit assessment');
+}
+
+export async function nextAssessmentStep(
+  userId: number,
+  action: 'attempt' | 'skip',
+): Promise<AssessmentNextStepResponse> {
+  const res = await fetch(buildUrl(`/api/assessment/${userId}/next`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  });
+  return await throwIfNotOk(res, 'Failed to continue assessment flow');
 }

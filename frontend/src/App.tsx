@@ -7,9 +7,10 @@ import ExtractionAnalysis from './screens/ExtractionAnalysis';
 import ProfileCreated from './screens/ProfileCreated';
 import Dashboard from './screens/Dashboard';
 import AssessmentIDE from './screens/AssessmentIDE';
+import LearningPath from './screens/LearningPath';
 import { loadSession } from './lib/session';
 
-export type Screen = 'landing' | 'login' | 'register' | 'profile-builder' | 'extraction-analysis' | 'profile-created' | 'dashboard' | 'assessment-ide';
+export type Screen = 'landing' | 'login' | 'register' | 'profile-builder' | 'extraction-analysis' | 'profile-created' | 'dashboard' | 'assessment-ide' | 'learning-path';
 
 export default function App() {
   const initialScreen = useMemo<Screen>(() => (loadSession()?.user_id ? 'dashboard' : 'landing'), []);
@@ -32,6 +33,7 @@ export default function App() {
       {currentScreen === 'profile-created' && <ProfileCreated onNavigate={navigate} />}
       {currentScreen === 'dashboard' && <Dashboard onNavigate={navigate} onNotify={notify} />}
       {currentScreen === 'assessment-ide' && <AssessmentIDE onNavigate={navigate} onNotify={notify} />}
+      {currentScreen === 'learning-path' && <LearningPath onNavigate={navigate} onNotify={notify} />}
 
       {toast ? (
         <div className="fixed bottom-5 right-5 z-[80] bg-surface-container-highest border border-outline-variant/40 px-4 py-2 text-xs font-bold tracking-wide text-white shadow-2xl">

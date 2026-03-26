@@ -1,6 +1,6 @@
 import React from 'react';
 import { Screen } from '../App';
-import { getLeaderboard, getLearningPath, getUser } from '../lib/api';
+import { generateLearningPath, getLeaderboard, getLearningPath, getUser } from '../lib/api';
 import { clearSession, loadSession } from '../lib/session';
 
 type DashboardProps = {
@@ -13,6 +13,29 @@ export default function Dashboard({ onNavigate, onNotify }: DashboardProps) {
   const [points, setPoints] = React.useState(0);
   const [learningPath, setLearningPath] = React.useState<any[]>([]);
   const [leaderboard, setLeaderboard] = React.useState<any[]>([]);
+  const [showGeneratePath, setShowGeneratePath] = React.useState(false);
+  const [generatingPath, setGeneratingPath] = React.useState(false);
+
+  const triggerGeneratePath = async () => {
+    const session = loadSession();
+    if (!session?.user_id) {
+      onNotify?.('Please login first');
+      onNavigate('login');
+      return;
+    }
+    try {
+      setGeneratingPath(true);
+      const generated = await generateLearningPath(session.user_id, true);
+      const path = Array.isArray(generated?.learning_path) ? generated.learning_path : [];
+      setLearningPath(path);
+      setShowGeneratePath(path.length === 0);
+      onNotify?.(path.length ? 'Learning path generated' : 'Unable to generate path now. Try again.');
+    } catch (err: any) {
+      onNotify?.(err.message || 'Failed to generate learning path');
+    } finally {
+      setGeneratingPath(false);
+    }
+  };
 
   const comingSoon = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -38,7 +61,11 @@ export default function Dashboard({ onNavigate, onNotify }: DashboardProps) {
         onNotify?.(userResult.reason?.message || 'Failed to load user profile');
       }
       if (pathResult.status === 'rejected') {
-        onNotify?.(pathResult.reason?.message || 'Failed to load learning path');
+        setShowGeneratePath(true);
+        const msg = String(pathResult.reason?.message || 'Failed to load learning path');
+        if (!msg.includes('[404]')) {
+          onNotify?.(msg);
+        }
       }
       if (boardResult.status === 'rejected') {
         onNotify?.(boardResult.reason?.message || 'Failed to load leaderboard');
@@ -59,6 +86,7 @@ export default function Dashboard({ onNavigate, onNotify }: DashboardProps) {
 
       const path = Array.isArray(pathData?.learning_path) ? pathData.learning_path : [];
       setLearningPath(path);
+      setShowGeneratePath(path.length === 0);
     })();
   }, [onNavigate, onNotify]);
 
@@ -86,7 +114,7 @@ export default function Dashboard({ onNavigate, onNotify }: DashboardProps) {
             <span className="material-symbols-outlined">terminal</span>
             Assessments
           </a>
-          <a onClick={comingSoon} className="text-[#dac2b2] hover:bg-[#2a2d2e] flex items-center gap-3 px-4 py-3 font-['Inter'] text-xs font-bold uppercase tracking-widest transition-all duration-200 ease-in-out" href="#">
+          <a onClick={(e) => { e.preventDefault(); onNavigate('learning-path'); }} className="text-[#dac2b2] hover:bg-[#2a2d2e] flex items-center gap-3 px-4 py-3 font-['Inter'] text-xs font-bold uppercase tracking-widest transition-all duration-200 ease-in-out" href="#">
             <span className="material-symbols-outlined">map</span>
             Learning Path
           </a>
@@ -364,7 +392,20 @@ export default function Dashboard({ onNavigate, onNotify }: DashboardProps) {
                       </tr>
                     )) : (
                       <tr>
-                        <td className="px-4 py-4 text-xs text-on-surface-variant" colSpan={3}>No learning path yet. Complete an assessment first.</td>
+                        <td className="px-4 py-4 text-xs text-on-surface-variant" colSpan={3}>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>No recommendation/tracker data yet.</span>
+                            {showGeneratePath ? (
+                              <button
+                                onClick={triggerGeneratePath}
+                                disabled={generatingPath}
+                                className="px-3 py-1 bg-primary-container text-on-primary text-[10px] font-black uppercase tracking-widest rounded hover:brightness-110 transition-all disabled:opacity-60"
+                              >
+                                {generatingPath ? 'Generating...' : 'Generate'}
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
                       </tr>
                     )}
                   </tbody>

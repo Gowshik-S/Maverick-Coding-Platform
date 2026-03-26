@@ -1,3 +1,39 @@
+# Assessment Lifecycle Upgrade Plan
+
+## Context Map
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| backend/agents/assessment_agent.py | assessment orchestration | add queued generation state, next-question/skip handlers, and reduced difficulty progression |
+| backend/routers/assessment.py | assessment APIs | return generating status and expose next-step action endpoint |
+| frontend/src/lib/api.ts | API client contract | support generating status and next-step action request |
+| frontend/src/screens/AssessmentIDE.tsx | UX flow | show "assessment getting ready", score popup, and next/skip actions |
+
+## Execution Checklist
+- [x] Add backend "generating" status flow before question is ready
+- [x] Add backend next-step endpoint for `attempt` and `skip`
+- [x] Reduce difficulty for next attempted question
+- [x] Apply basic-level allocation + recommendation generation on skip
+- [x] Update frontend to poll and show preparing state
+- [x] Update frontend score popup with attend/skip choices
+- [x] Build and verify backend/frontend behavior
+
+## Review Notes
+- Assessment fetch now returns `status: generating` while LLM question creation is in progress; frontend shows "Assessment is getting ready" and polls until ready.
+- Submit response now carries decision metadata (`can_attempt_next`, `can_skip`, `next_difficulty_suggestion`) to drive post-score flow.
+- New backend endpoint `POST /api/assessment/{user_id}/next` supports:
+	- `attempt`: generates next question at reduced difficulty.
+	- `skip`: assigns basic level and immediately generates recommendations.
+- Frontend assessment page now shows a result popup after submit with both actions.
+- Verification results:
+	- `docker compose up --build -d backend frontend` succeeded.
+	- `npm run build` succeeded.
+	- runtime checks:
+		- `/api/assessment/1` returned `status=generating` first, then `status=ready`.
+		- submit endpoint returned score + decision metadata.
+		- next attempt returned `next=assessment`; next skip returned `next=learning_path`.
+
 # Dashboard + Assessment Bugfix Plan
 
 ## Context Map
@@ -201,6 +237,34 @@
 - WebSocket check:
 	- `WS /api/ws/1` connected and received `{"progress": "path_ready", "user_id": 1}` before close.
 - Server access logs confirm all endpoint calls completed with 200 responses.
+
+# Frontend Learning Path Integration Plan
+
+## Context Map
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| frontend/src/screens/LearningPath.tsx | Learning Path page UI | Add the existing learning_path page implementation as a reusable screen |
+| frontend/src/App.tsx | App-level navigation | Add `learning-path` to screen union and render the new screen |
+| frontend/src/screens/Dashboard.tsx | Entry-point navigation | Route Learning Path nav item to the new page instead of showing Coming soon |
+
+### Risks
+- [ ] Accidental visual regressions while moving page into frontend
+- [ ] Broken navigation flow if screen union and click handlers are mismatched
+
+## Execution Checklist
+- [x] Create `LearningPath` screen from `learning_path/src/App.tsx`
+- [x] Wire `learning-path` in `App` navigation
+- [x] Update dashboard nav click to open Learning Path
+- [x] Build frontend and confirm no TypeScript errors
+
+## Review Notes
+- Added `frontend/src/screens/LearningPath.tsx` by porting the existing page structure and styling from `learning_path/src/App.tsx`.
+- Integrated app-level route support by adding `learning-path` to `Screen` and rendering the new screen in `frontend/src/App.tsx`.
+- Updated dashboard side-nav Learning Path entry to navigate to `learning-path` instead of showing a "Coming soon" toast.
+- Verification: `npm run build` passed successfully in `frontend`.
+- Existing CSS import-order warnings (pre-existing) are unchanged and non-blocking.
 
 ## Refactor Plan: backend.md Full Implementation
 
@@ -499,3 +563,35 @@
 	- Check 3: Redis `user:7:progress` = `path_generated`.
 	- Check 4: Redis `user:7:learning_path` present and JSON content starts with module objects.
 	- Check 5: override skip returned 3 modules with weeks reindexed `[1,2,3]`.
+
+## Learning Path Backend Plan (Tracker Agent)
+
+### Context Map
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| backend/db/schema.sql | DB schema | Add `module_progress`, `activity_logs`, `stagnation_alerts` tables |
+| backend/agents/tracker_agent.py | Tracker agent core | Implement summary, progress, stagnation, nudge, module start/complete, intervention, dismiss |
+| backend/routers/tracker.py | API routes | Add tracker routes and learning path cache clear endpoint |
+| backend/main.py | Router wiring | Register tracker router |
+
+### Execution Checklist
+- [x] Add tracker DB migrations to schema
+- [x] Implement tracker agent functions per prompt
+- [x] Add tracker router endpoints
+- [x] Register tracker router in app
+- [x] Rebuild backend and run compile checks
+- [x] Run all tracker endpoint and DB verification checks
+
+### Review Notes
+- Added all three required tables and verified they are queryable in PostgreSQL.
+- Replaced tracker agent with full implementation and preserved backward compatibility for admin route imports.
+- Added tracker router with 8 requested endpoints and wired it under `/api`.
+- Validation results:
+	- `GET /api/tracker/7/summary` returned `{modules_completed, modules_total, hours_spent, streak_days, last_activity}`.
+	- `GET /api/tracker/7/progress` returned default per-module rows before start and updated rows after start/complete.
+	- `POST /api/tracker/7/module/0/start` set status to `in_progress`.
+	- `POST /api/tracker/7/module/0/complete` set status to `completed` and `progress_percent` to `100`.
+	- `GET /api/tracker/7/stagnation` returned required shape.
+	- `POST /api/tracker/7/intervention` returned expected response after setting an in-progress module and stored `user:7:easier_question` JSON in Redis.

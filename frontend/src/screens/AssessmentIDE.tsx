@@ -1,6 +1,6 @@
 import React from 'react';
 import { Screen } from '../App';
-import { getAssessment, submitAssessment } from '../lib/api';
+import { getAssessment, nextAssessmentStep, submitAssessment } from '../lib/api';
 import { loadSession } from '../lib/session';
 
 type AssessmentIDEProps = {
@@ -16,6 +16,9 @@ export default function AssessmentIDE({ onNavigate, onNotify }: AssessmentIDEPro
   const [activePane, setActivePane] = React.useState<'testcases' | 'result'>('testcases');
   const [activeCaseIndex, setActiveCaseIndex] = React.useState(0);
   const [lastResult, setLastResult] = React.useState<any>(null);
+  const [preparing, setPreparing] = React.useState(true);
+  const [showDecisionPopup, setShowDecisionPopup] = React.useState(false);
+  const [decisionBusy, setDecisionBusy] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
@@ -25,9 +28,21 @@ export default function AssessmentIDE({ onNavigate, onNotify }: AssessmentIDEPro
       onNavigate('login');
       return;
     }
-    (async () => {
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const loadQuestion = async () => {
       try {
         const q = await getAssessment(session.user_id);
+        if (cancelled) return;
+
+        if (q?.status === 'generating') {
+          setPreparing(true);
+          timerId = setTimeout(loadQuestion, 2000);
+          return;
+        }
+
+        setPreparing(false);
         setQuestion(q);
         setSolutionCode(String(q?.starter_code || ''));
         setUtilsCode('');
@@ -35,9 +50,16 @@ export default function AssessmentIDE({ onNavigate, onNotify }: AssessmentIDEPro
         setActivePane('testcases');
         setLastResult(null);
       } catch (err: any) {
-        onNotify?.(err.message || 'Failed to load assessment');
+        if (!cancelled) onNotify?.(err.message || 'Failed to load assessment');
       }
-    })();
+    };
+
+    loadQuestion();
+
+    return () => {
+      cancelled = true;
+      if (timerId) clearTimeout(timerId);
+    };
   }, [onNavigate, onNotify]);
 
   const submit = async () => {
@@ -53,10 +75,45 @@ export default function AssessmentIDE({ onNavigate, onNotify }: AssessmentIDEPro
       setLastResult(result);
       setActivePane('result');
       onNotify?.(`Submitted: score ${result.score}/${100}`);
+      setShowDecisionPopup(true);
     } catch (err: any) {
       onNotify?.(err.message || 'Submission failed');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleNextAction = async (action: 'attempt' | 'skip') => {
+    const session = loadSession();
+    if (!session?.user_id) {
+      onNotify?.('Please login first');
+      return;
+    }
+
+    try {
+      setDecisionBusy(true);
+      const result = await nextAssessmentStep(session.user_id, action);
+      setShowDecisionPopup(false);
+
+      if (result.next === 'assessment' && result.question) {
+        setQuestion(result.question);
+        setSolutionCode(String(result.question.starter_code || ''));
+        setUtilsCode('');
+        setActiveCaseIndex(0);
+        setActivePane('testcases');
+        setLastResult(null);
+        onNotify?.(result.message || 'Next assessment is ready');
+        return;
+      }
+
+      if (result.next === 'learning_path') {
+        onNotify?.(result.message || 'Basic level assigned. Showing recommendations.');
+        onNavigate('dashboard');
+      }
+    } catch (err: any) {
+      onNotify?.(err.message || 'Failed to continue assessment flow');
+    } finally {
+      setDecisionBusy(false);
     }
   };
 
@@ -100,6 +157,45 @@ export default function AssessmentIDE({ onNavigate, onNotify }: AssessmentIDEPro
 
   return (
     <div className="h-screen bg-surface-dim text-on-surface font-sans flex flex-col overflow-hidden">
+      {showDecisionPopup ? (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-surface-container border border-outline-variant/30 shadow-2xl p-6">
+            <h3 className="text-lg font-black text-white mb-2 uppercase tracking-widest">Assessment Result</h3>
+            <p className="text-on-surface-variant text-sm mb-4">
+              Score: <span className="text-white font-bold">{lastResult?.score ?? 0}/100</span>.
+              Next difficulty will be reduced to <span className="text-white font-bold">{lastResult?.next_difficulty_suggestion ?? '--'}</span>.
+            </p>
+            <div className="bg-surface-container-highest border border-outline-variant/20 p-3 mb-6 text-xs text-on-surface-variant">
+              {String(lastResult?.feedback || 'No feedback available.')}
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                disabled={decisionBusy}
+                onClick={() => handleNextAction('skip')}
+                className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-bold uppercase tracking-widest hover:bg-surface-container-highest transition-colors disabled:opacity-60"
+              >
+                Skip & Show Recommendation
+              </button>
+              <button
+                disabled={decisionBusy}
+                onClick={() => handleNextAction('attempt')}
+                className="kinetic-monolith-gradient px-4 py-2 text-on-primary text-xs font-bold uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-60"
+              >
+                Attend Next Question
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {preparing ? (
+        <div className="absolute inset-0 z-50 bg-surface-dim/95 flex items-center justify-center">
+          <div className="text-center p-6 border border-outline-variant/30 bg-surface-container">
+            <p className="text-white font-black uppercase tracking-widest text-sm mb-2">Assessment Is Getting Ready</p>
+            <p className="text-on-surface-variant text-xs">Generating your AI question. Please wait...</p>
+          </div>
+        </div>
+      ) : null}
       
       {/* Top Banner */}
       <div className="h-12 bg-surface-container-low border-b border-outline-variant/20 flex items-center justify-between px-4 shrink-0">

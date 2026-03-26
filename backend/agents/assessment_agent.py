@@ -4,6 +4,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from threading import Thread
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -12,6 +13,7 @@ from groq import Groq
 from db.postgres import execute, fetch_all, fetch_one
 from db.redis_client import (
     client as redis_client,
+    get_progress,
     get_question,
     set_progress,
     set_question,
@@ -730,6 +732,94 @@ def run_assessment_agent(user_id: int) -> Dict[str, Any]:
     return question
 
 
+def _generate_and_store_assessment(user_id: int) -> None:
+    try:
+        skills = _get_user_skills(user_id)
+        if skills is None:
+            set_progress(user_id, "assessment_error")
+            return
+
+        topic = detect_weakest_skill(skills)
+        resume_skill_score = _normalize_skill_vector(skills).get(topic, 0.5)
+        difficulty = get_difficulty(user_id, resume_skill_score)
+        generate_question(topic, difficulty, user_id)
+        set_progress(user_id, "assessment_ready")
+        _log(f"assessment_ready_async user={user_id} topic={topic}")
+    except Exception as exc:  # noqa: BLE001
+        set_progress(user_id, "assessment_error")
+        _log(f"assessment_generation_failed user={user_id} error={exc}")
+
+
+def queue_or_get_assessment(user_id: int) -> Dict[str, Any]:
+    skills = _get_user_skills(user_id)
+    if skills is None:
+        return {"error": "User not found"}
+
+    existing = get_question(user_id)
+    if existing:
+        existing["status"] = "ready"
+        return existing
+
+    progress = get_progress(user_id) or ""
+    if progress == "assessment_generating":
+        return {
+            "status": "generating",
+            "message": "Assessment is getting ready",
+        }
+
+    set_progress(user_id, "assessment_generating")
+    Thread(target=_generate_and_store_assessment, args=(user_id,), daemon=True).start()
+    return {
+        "status": "generating",
+        "message": "Assessment is getting ready",
+    }
+
+
+def handle_assessment_next_step(user_id: int, action: str) -> Dict[str, Any]:
+    if action not in {"attempt", "skip"}:
+        return {"error": "Invalid action"}
+
+    skills = _get_user_skills(user_id)
+    if skills is None:
+        return {"error": "User not found"}
+
+    if action == "skip":
+        normalized = _normalize_skill_vector(skills or {})
+        if not normalized:
+            normalized = {"Python": 0.3, "DSA": 0.3, "SQL": 0.3, "React": 0.3}
+        basic_skills = {skill: min(float(score), 0.3) for skill, score in normalized.items()}
+        execute("UPDATE users SET skills = %s WHERE id = %s", (json.dumps(basic_skills), user_id))
+        redis_client.set(f"user:{user_id}:profile", json.dumps(basic_skills))
+        redis_client.set(f"user:{user_id}:difficulty", 0.1, ex=86400)
+
+        from agents.recommender_agent import run_recommender_agent
+
+        recommendation = run_recommender_agent(user_id)
+        set_progress(user_id, "path_ready")
+        return {
+            "next": "learning_path",
+            "message": "Skipped next question. Basic level assigned and recommendations generated.",
+            "learning_path": recommendation.get("learning_path", []),
+        }
+
+    last_row = fetch_one(
+        "SELECT difficulty FROM assessments WHERE user_id = %s ORDER BY created_at DESC LIMIT 1",
+        (user_id,),
+    )
+    last_difficulty = float(last_row["difficulty"]) if last_row and last_row.get("difficulty") is not None else 0.5
+    next_difficulty = round(max(0.1, last_difficulty - 0.1), 2)
+    redis_client.set(f"user:{user_id}:difficulty", next_difficulty, ex=86400)
+
+    topic = detect_weakest_skill(skills)
+    next_question = generate_question(topic, next_difficulty, user_id)
+    set_progress(user_id, "assessment_ready")
+    return {
+        "next": "assessment",
+        "message": f"Next question ready at reduced difficulty ({next_difficulty}).",
+        "question": next_question,
+    }
+
+
 def submit_assessment(
     user_id: int,
     user_code: str,
@@ -770,5 +860,8 @@ def submit_assessment(
         "evaluation_error": str(eval_result.get("error", "") or ""),
         "topic": topic,
         "difficulty": difficulty,
-        "next": "learning_path",
+        "next_difficulty_suggestion": round(max(0.1, difficulty - 0.1), 2),
+        "can_attempt_next": True,
+        "can_skip": True,
+        "next": "assessment_decision",
     }

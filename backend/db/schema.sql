@@ -62,3 +62,36 @@ CREATE TABLE IF NOT EXISTS badges (
     reason TEXT,
     earned_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS module_progress (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    module_index INTEGER,
+    status VARCHAR(20) DEFAULT 'not_started',
+    progress_percent INTEGER DEFAULT 0,
+    time_spent_minutes INTEGER DEFAULT 0,
+    last_accessed TIMESTAMP,
+    completed_at TIMESTAMP,
+    UNIQUE (user_id, module_index)
+);
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    event VARCHAR(50),
+    module_index INTEGER,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stagnation_alerts (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE REFERENCES users(id),
+    reason VARCHAR(50),
+    nudge_message TEXT,
+    days_inactive INTEGER DEFAULT 0,
+    failed_attempts INTEGER DEFAULT 0,
+    dismissed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
