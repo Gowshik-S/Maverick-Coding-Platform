@@ -341,15 +341,33 @@ def _post_json(url: str, payload: Dict[str, Any], timeout: int = 20) -> Dict[str
     return json.loads(raw)
 
 
+def _derive_piston_base_url(execute_url: str) -> str:
+    url = execute_url.rstrip("/")
+    if url.endswith("/execute"):
+        return url[: -len("/execute")]
+    if url.endswith("/piston"):
+        return url[: -len("/piston")]
+    return url
+
+
+def _ensure_python_runtime_installed(base_url: str, timeout: int = 120) -> None:
+    runtime_version = os.getenv("PISTON_PYTHON_VERSION", "3.10.0").strip() or "3.10.0"
+    install_payload = {"language": "python", "version": runtime_version}
+    _post_json(f"{base_url}/packages", install_payload, timeout=timeout)
+
+
 def _run_python_in_piston(code: str) -> Dict[str, Any]:
     base_url = os.getenv("PISTON_URL", "https://piston.yourdomain.com/api/v2/piston").strip()
+    if not base_url:
+        raise RuntimeError("PISTON_URL is empty")
+
     candidates = [base_url]
     if not base_url.endswith("/execute"):
         candidates.append(base_url.rstrip("/") + "/execute")
 
     payload = {
         "language": "python",
-        "version": "3.10.0",
+        "version": os.getenv("PISTON_PYTHON_VERSION", "3.10.0").strip() or "3.10.0",
         "files": [{"content": code}],
     }
 
@@ -357,6 +375,17 @@ def _run_python_in_piston(code: str) -> Dict[str, Any]:
     for url in candidates:
         try:
             return _post_json(url, payload)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            if exc.code == 400 and "runtime is unknown" in body:
+                try:
+                    install_base = _derive_piston_base_url(url)
+                    _ensure_python_runtime_installed(install_base)
+                    return _post_json(url, payload)
+                except Exception as install_exc:  # noqa: BLE001
+                    last_error = install_exc
+                    continue
+            last_error = RuntimeError(f"Piston HTTP {exc.code}: {body}")
         except Exception as exc:  # noqa: BLE001
             last_error = exc
 
@@ -525,6 +554,31 @@ def grade_submission(user_code: str, question: Dict[str, Any], eval_result: Dict
             "improvement": "Submit a working attempt to receive detailed feedback.",
             "time_complexity": "N/A",
             "space_complexity": "N/A",
+        }
+
+    eval_error = str(eval_result.get("error") or "").strip()
+    eval_error_lower = eval_error.lower()
+    execution_failure_markers = [
+        "syntaxerror",
+        "traceback",
+        "piston execution failed",
+        "runtime is unknown",
+        "security violation",
+        "function '",
+        "no structured result",
+        " no code submitted",
+        "tc1 error:",
+        "tc2 error:",
+    ]
+    is_execution_failure = bool(eval_error) and any(marker in eval_error_lower for marker in execution_failure_markers)
+
+    if is_execution_failure:
+        return {
+            "score": 0,
+            "feedback": f"Code execution failed: {eval_error}",
+            "improvement": "Fix syntax/runtime errors and resubmit.",
+            "time_complexity": "Not evaluated",
+            "space_complexity": "Not evaluated",
         }
 
     prompt = f"""You are a senior code reviewer. Grade this submission briefly.
@@ -713,6 +767,7 @@ def submit_assessment(
         "space_complexity": str(grade_result.get("space_complexity", "Unknown")),
         "test_cases_passed": int(eval_result.get("test_cases_passed", 0)),
         "test_cases_total": int(eval_result.get("test_cases_total", 0)),
+        "evaluation_error": str(eval_result.get("error", "") or ""),
         "topic": topic,
         "difficulty": difficulty,
         "next": "learning_path",

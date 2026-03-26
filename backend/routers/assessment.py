@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agents.assessment_agent import run_assessment_agent, submit_assessment
-from agents.recommender_agent import build_learning_path
 from db.postgres import fetch_one
 
 router = APIRouter()
@@ -37,9 +36,3 @@ async def submit_code(user_id: int, body: SubmitRequest):
     if result.get("error") == "No active assessment":
         raise HTTPException(status_code=400, detail="No active assessment")
     return result
-
-
-@router.get("/learning-path/{user_id}")
-async def get_learning_path(user_id: int):
-    path = build_learning_path(user_id)
-    return path

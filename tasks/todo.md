@@ -331,3 +331,47 @@
 - Existing response contract for grader flow is preserved (`passed`, `test_cases_passed`, `test_cases_total`, `errors`, `execution_time_ms`, `error`).
 - Environment template now includes `PISTON_URL=https://piston.yourdomain.com/api/v2/piston`.
 - Syntax verification passed via `python -m compileall agents/assessment_agent.py`.
+
+## Runtime Wiring Verification (Live Container)
+
+### Execution Checklist
+- [x] Confirm runtime mismatch between workspace and running backend container
+- [x] Add `PISTON_URL` passthrough in compose backend environment
+- [x] Rebuild and restart backend container
+- [x] Verify in-container `PISTON_URL` is populated
+- [x] Verify in-container assessment agent includes Piston functions
+- [x] Run one live submit check using allowed command path
+
+### Review Notes
+- Backend was rebuilt/restarted from repository root to ensure compose `.env` interpolation.
+- Effective compose config resolves backend `PISTON_URL` to `https://piston.gowshik.in/api/v2/piston`.
+- In-container code now includes `_run_python_in_piston` and evaluator call path.
+- Live submit check returned test-case metrics (`test_cases_passed`, `test_cases_total`) and scoring successfully.
+- Direct container-to-Piston execution probe against both `PISTON_URL` and `PISTON_URL/execute` returned HTTP 403 Forbidden.
+- Conclusion: runtime wiring is correct, but the configured Piston endpoint is currently not permitting execution from this backend runtime.
+
+## Recommender Agent Implementation (Plan-Aligned)
+
+### Execution Checklist
+- [x] Create `backend/utils/resource_scraper.py`
+- [x] Replace `backend/agents/recommender_agent.py`
+- [x] Create `backend/routers/recommender.py`
+- [x] Add recommender router wiring in `backend/main.py`
+- [x] Add compatibility DB adapter `backend/db/database.py`
+- [x] Resolve route overlap with old learning-path endpoint in `routers/assessment.py`
+- [x] Add required dependencies in `backend/requirements.txt`
+- [x] Run compile checks and runtime verification sequence
+
+### Review Notes
+- Implemented the requested recommender flow with skill-gap analysis, LLM path generation, Redis cache/event publishing, and manual override.
+- Added YouTube + DDGS resource scraper with Redis caching and trusted-source prioritization.
+- Added resilient compatibility fixes for current schema/runtime:
+	- `users.goal` optional in code path (fallback goal used)
+	- `learning_paths` save works without a unique constraint (update-or-insert path)
+	- resource list always includes a video-shaped object to satisfy API expectations
+- Verification outcomes (ordered checks):
+	- Check 1: `GET /api/learning-path/7` returned 4 modules with required fields and resources including `video.url`, `video.channel`, `video.duration`.
+	- Check 2: DB query returned `user_id=7`, `modules=4` before override.
+	- Check 3: Redis `user:7:progress` = `path_generated`.
+	- Check 4: Redis `user:7:learning_path` present and JSON content starts with module objects.
+	- Check 5: override skip returned 3 modules with weeks reindexed `[1,2,3]`.
