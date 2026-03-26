@@ -1,3 +1,5 @@
+import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.exceptions import RedisError
@@ -5,6 +7,7 @@ from redis.exceptions import RedisError
 from db.postgres import initialize_schema, wait_for_postgres
 from db.redis_client import client as redis_client
 from routers import admin, assessment, auth, hackathon, leaderboard, recommender
+from utils.resource_scraper import fetch_resources
 
 app = FastAPI(
     title="3 Mavericks Coding Platform",
@@ -37,6 +40,28 @@ def startup_init():
     except RedisError:
         # hardcoded/stub: API starts even if redis is temporarily unavailable.
         pass
+    prewarm_resource_cache()
+
+
+def prewarm_resource_cache():
+    combos = [
+        ("Python", "beginner"),
+        ("Python", "intermediate"),
+        ("DSA", "beginner"),
+        ("DSA", "intermediate"),
+        ("SQL", "intermediate"),
+        ("React", "beginner"),
+        ("React", "intermediate"),
+        ("System Design", "intermediate"),
+        ("System Design", "advanced"),
+        ("Docker", "beginner"),
+        ("AWS", "beginner"),
+    ]
+    print("[Startup] Pre-warming resource cache...")
+    for skill, diff in combos:
+        fetch_resources(skill, diff, f"{skill} Core Concepts")
+        time.sleep(0.5)
+    print(f"[Startup] Cache warmed: {len(combos)} combos = ~{len(combos) * 102} YT units used")
 
 
 @app.get("/")
