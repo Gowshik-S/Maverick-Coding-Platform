@@ -1,3 +1,94 @@
+# Dashboard + Assessment Bugfix Plan
+
+## Context Map
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| backend/agents/recommender_agent.py | learning-path generation | normalize string skill levels to numeric scores before gap math |
+| backend/routers/recommender.py | error semantics | return 404 only for missing-user case, 500 for other value errors |
+| frontend/src/screens/Dashboard.tsx | dashboard data load | use partial loading so one API failure does not blank the full dashboard |
+| frontend/src/screens/AssessmentIDE.tsx | IDE behavior | implement real file tab switching, persistent editor buffers, and dynamic testcase panel |
+
+## Execution Checklist
+- [x] Reproduce and locate float-conversion root cause
+- [x] Patch recommender score normalization for string levels
+- [x] Fix learning-path router error classification
+- [x] Improve dashboard loading resilience with partial API success
+- [x] Fix assessment file switching/typing state handling
+- [x] Bind testcase panel to backend-provided testcases
+- [x] Rebuild and verify frontend/backend run behavior
+
+## Review Notes
+- Root cause for dashboard error was backend learning-path gap analysis calling `float()` on string skill levels (for example `"intermediate"`), which raised `ValueError` and was incorrectly surfaced as `404` by the router.
+- Fixed by adding robust skill normalization in recommender and tightening router error classification (`404` only for missing user).
+- Dashboard now uses `Promise.allSettled` so partial backend failures no longer block all dashboard data.
+- Assessment IDE now has stateful file tabs (`solution.py`/`utils.py`) with preserved typing buffers and testcase panel bound to backend-provided `test_cases`.
+- Verification passed:
+	- `docker compose up --build -d backend frontend`
+	- `npm run build` (frontend)
+	- API checks: `/api/learning-path/1` -> 200, `/api/assessment/1` -> 200
+
+# Frontend-Backend Integration Plan (Current Task)
+
+# Docker Build And Run Check
+
+## Execution Checklist
+- [x] Confirm Docker and Compose are available
+- [x] Run `docker compose up --build -d` from project root
+- [x] Verify running services with `docker compose ps`
+- [x] Capture quick health checks for frontend and backend
+
+## Review Notes
+- Docker CLI check: `Docker version 28.5.1` and `Docker Compose version v2.40.0-desktop.1`.
+- Compose build/start succeeded for frontend and backend images.
+- Running services include frontend (`3000`), backend (`8000`), piston (`2000`), postgres (`5432`), redis (`6379`).
+- HTTP request commands are blocked by terminal policy (`Invoke-WebRequest` and `curl` deny rules), so port-level checks were used.
+- Port checks passed: `frontend_port_3000_open=True` and `backend_port_8000_open=True`.
+
+# Frontend-Backend Integration Plan (Current Task)
+
+## Context Map
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| frontend/src/App.tsx | App navigation/session bootstrap | restore session-aware startup and shared notification state |
+| frontend/src/lib/api.ts | API layer | add register/login/user/assessment/path/leaderboard calls |
+| frontend/src/lib/session.ts | Session persistence | store/retrieve authenticated user |
+| frontend/src/state/onboarding.ts | Onboarding state | persist draft/register response/resume between screens |
+| frontend/src/screens/Register.tsx | Step 1 | collect user info and move to upload step |
+| frontend/src/screens/Login.tsx | Auth | call backend login and route to dashboard |
+| frontend/src/screens/ProfileBuilder.tsx | Step 2 | upload resume to backend `/api/register` |
+| frontend/src/screens/ExtractionAnalysis.tsx | Missing-info step | submit extra fields if backend requires more info |
+| frontend/src/screens/ProfileCreated.tsx | Success step | show extracted skill summary from backend response |
+| frontend/src/screens/Dashboard.tsx | Data view | load user, learning path, leaderboard from backend |
+| frontend/src/screens/AssessmentIDE.tsx | Assessment UI | fetch question + submit code + show grading result |
+| frontend/src/index.css | Notification styles only | add minimal toast styles without changing existing palette |
+| frontend/vite.config.ts | Dev connectivity | restore `/api` and ws proxy to backend |
+
+### Risks
+- [ ] Breaking visual layout while adding state/event handlers
+- [ ] Backend endpoint mismatch (`/api/learning-path/...` route variants)
+- [ ] Unavailable pages/features should show "Coming soon" notification, not dead links
+
+## Execution Checklist
+- [x] Create/restore `api`, `session`, and `onboarding` utility modules
+- [x] Add app-level notification mechanism for "Coming soon" and API errors
+- [x] Wire register + resume upload + conditional missing-info completion flow
+- [x] Wire login flow to backend and persist session
+- [x] Wire dashboard to backend data (user + path + leaderboard)
+- [x] Wire assessment fetch/submit to backend endpoints
+- [x] Add "Coming soon" notifications on non-implemented destinations/actions
+- [x] Restore Vite API/ws proxy settings
+- [x] Build and fix any TypeScript/runtime errors
+
+## Review Notes
+- Frontend now calls backend for register, login, user profile, learning path, leaderboard, assessment fetch, and assessment submit.
+- All missing/static links in UI now trigger an in-app "Coming soon" notification.
+- Visual styling and color palette were preserved; only behavior/state wiring was changed.
+- `npm run build` passed successfully. Existing CSS import-order warnings remain non-blocking.
+
 # Implementation Plan
 
 ## Context Map
@@ -258,6 +349,39 @@
 	- epsilon-greedy style difficulty adjustment using Redis persisted difficulty
 	- Groq-generated adaptive questions with model fallback and hardcoded fallback bank
 	- 5-second sandboxed `exec()` evaluation via subprocess
+
+## YT Scraper Replacement Plan (2026-03-26)
+
+### Context Map
+
+### Files to Modify
+| File | Purpose | Changes Needed |
+|------|---------|----------------|
+| backend/utils/resource_scraper.py | YouTube + article fetcher | Replace with key-rotation, trust-scored YouTube scraper using official API client |
+| backend/main.py | Startup lifecycle | Add cache pre-warm call on startup |
+
+### Files to Verify
+| File | Purpose |
+|------|---------|
+| .env | Ensure three YouTube API keys are present |
+| docker-compose.yml | Ensure backend receives YOUTUBE_API_KEY_1/2/3 |
+| backend/requirements.txt | Ensure `google-api-python-client`, `duckduckgo-search`, `redis` are installed |
+
+### Execution Checklist
+- [x] Replace `resource_scraper.py` per prompt spec (trust scoring + key rotation + caching)
+- [x] Add `prewarm_resource_cache()` and hook it in startup event
+- [x] Compile-check scraper module
+- [x] Validate `compute_trust_score()` behavior
+- [x] Test each API key independently (1, 2, 3) and capture pass/fail
+- [x] Verify Redis cache set/get for `resources:React:beginner`
+- [x] Verify backend startup log contains cache warm summary
+
+### Review Notes
+- Recommender resource scraper was replaced with YouTube Data API v3 enrichment + trust scoring and Redis TTL cache.
+- All three configured keys returned valid search results in isolated one-key-at-a-time tests.
+- `fetch_resources('React','beginner',...)` returned a video item with `trust_score`, `trust_label`, `likes`, and `subscribers` fields.
+- Redis cache contains `resources:React:beginner` JSON payload.
+- Backend startup logs now include: `Cache warmed: 11 combos = ~1122 YT units used`.
 	- LLM-based grading with fallback and failed-evaluation score cap
 	- DB persistence, weighted skill update, Redis progress/leaderboard updates, and `user_assessment_done` publish
 - Updated `backend/routers/assessment.py` to delegate question generation and submission handling to agent entry points.

@@ -8,13 +8,53 @@ export type RegisterPayload = {
   extra_role?: string;
 };
 
-export type LoginResponse = {
+export type RegisterResponse = {
   user_id?: number;
   name?: string;
-  skills?: Record<string, string>;
+  email?: string;
+  skills?: Record<string, string | number>;
+  extraction_method?: string;
+  needs_more_info?: boolean;
+  missing?: string[];
+  questions?: Record<string, unknown>;
+  partial_name?: string;
   message?: string;
   error?: string;
   detail?: string;
+};
+
+export type LoginResponse = {
+  user_id?: number;
+  name?: string;
+  skills?: Record<string, string | number>;
+  message?: string;
+  error?: string;
+  detail?: string;
+};
+
+export type AssessmentQuestion = {
+  title?: string;
+  description?: string;
+  examples?: Array<{ input?: string; output?: string; explanation?: string }>;
+  constraints?: string[];
+  starter_code?: string;
+  function_name?: string;
+  topic?: string;
+  difficulty?: number;
+  difficulty_label?: string;
+};
+
+export type AssessmentSubmitResponse = {
+  score: number;
+  feedback: string;
+  improvement: string;
+  time_complexity: string;
+  space_complexity: string;
+  test_cases_passed: number;
+  test_cases_total: number;
+  evaluation_error?: string;
+  topic?: string;
+  difficulty?: number;
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -31,15 +71,21 @@ async function parseJsonSafe(res: Response): Promise<any> {
   }
 }
 
-function extractBackendError(data: any, fallback: string): string {
-  const message = data?.error || data?.detail || data?.message;
-  if (typeof message === 'string' && message.trim()) {
-    return message;
-  }
+function backendMessage(data: any, fallback: string): string {
+  const msg = data?.error || data?.detail || data?.message;
+  if (typeof msg === 'string' && msg.trim()) return msg;
   return fallback;
 }
 
-export async function registerUser(payload: RegisterPayload) {
+async function throwIfNotOk(res: Response, fallback: string): Promise<any> {
+  const data = await parseJsonSafe(res);
+  if (!res.ok) {
+    throw new Error(`${backendMessage(data, fallback)} [${res.status}]`);
+  }
+  return data;
+}
+
+export async function registerUser(payload: RegisterPayload): Promise<RegisterResponse> {
   const form = new FormData();
   form.append('name', payload.name);
   form.append('email', payload.email);
@@ -50,16 +96,8 @@ export async function registerUser(payload: RegisterPayload) {
   if (payload.extra_education) form.append('extra_education', payload.extra_education);
   if (payload.extra_role) form.append('extra_role', payload.extra_role);
 
-  const res = await fetch(buildUrl('/api/register'), {
-    method: 'POST',
-    body: form,
-  });
-  const data = await parseJsonSafe(res);
-  if (!res.ok) {
-    const message = extractBackendError(data, `Register failed (${res.status})`);
-    throw new Error(`${message} [${res.status}]`);
-  }
-  return data;
+  const res = await fetch(buildUrl('/api/register'), { method: 'POST', body: form });
+  return await throwIfNotOk(res, 'Registration failed');
 }
 
 export async function loginUser(email: string, password: string): Promise<LoginResponse> {
@@ -67,29 +105,40 @@ export async function loginUser(email: string, password: string): Promise<LoginR
   form.append('email', email);
   form.append('password', password);
 
-  const res = await fetch(buildUrl('/api/login'), {
-    method: 'POST',
-    body: form,
-  });
-  const data = await parseJsonSafe(res);
-  if (!res.ok) {
-    const message = extractBackendError(data, `Login failed (${res.status})`);
-    throw new Error(`${message} [${res.status}]`);
-  }
-  return data;
+  const res = await fetch(buildUrl('/api/login'), { method: 'POST', body: form });
+  return await throwIfNotOk(res, 'Login failed');
 }
 
-export async function getUser(userId: number) {
+export async function getUser(userId: number): Promise<any> {
   const res = await fetch(buildUrl(`/api/user/${userId}`));
-  return parseJsonSafe(res);
+  return await throwIfNotOk(res, 'Failed to load user');
 }
 
-export async function getLearningPath(userId: number) {
+export async function getLearningPath(userId: number): Promise<any> {
   const res = await fetch(buildUrl(`/api/learning-path/${userId}`));
-  return parseJsonSafe(res);
+  return await throwIfNotOk(res, 'Failed to load learning path');
 }
 
-export async function getLeaderboard() {
+export async function getLeaderboard(): Promise<any[]> {
   const res = await fetch(buildUrl('/api/leaderboard'));
-  return parseJsonSafe(res);
+  return await throwIfNotOk(res, 'Failed to load leaderboard');
+}
+
+export async function getAssessment(userId: number): Promise<AssessmentQuestion> {
+  const res = await fetch(buildUrl(`/api/assessment/${userId}`));
+  return await throwIfNotOk(res, 'Failed to load assessment');
+}
+
+export async function submitAssessment(
+  userId: number,
+  code: string,
+  timeTaken = 0,
+  hintsUsed = 0,
+): Promise<AssessmentSubmitResponse> {
+  const res = await fetch(buildUrl(`/api/submit/${userId}`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, time_taken: timeTaken, hints_used: hintsUsed }),
+  });
+  return await throwIfNotOk(res, 'Failed to submit assessment');
 }

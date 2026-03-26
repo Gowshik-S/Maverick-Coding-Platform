@@ -23,6 +23,24 @@ TARGET_THRESHOLDS = {
 }
 
 
+def _skill_to_score(value) -> float:
+    if isinstance(value, (int, float)):
+        score = float(value)
+        if score > 1.0:
+            score = score / 100.0
+        return max(0.0, min(1.0, score))
+
+    mapping = {
+        "none": 0.1,
+        "beginner": 0.3,
+        "intermediate": 0.6,
+        "intermediate-advanced": 0.75,
+        "advanced": 0.9,
+        "expert": 0.9,
+    }
+    return mapping.get(str(value).strip().lower(), 0.0)
+
+
 def extract_json(text) -> str:
     list_match = re.search(r"\[.*?\]", text, re.DOTALL)
     if list_match:
@@ -46,7 +64,7 @@ def call_groq(prompt, model=MODEL) -> str:
 def analyze_skill_gaps(skills: dict) -> dict:
     gaps = {}
     for skill, threshold in TARGET_THRESHOLDS.items():
-        gap = threshold - float(skills.get(skill, 0.0) or 0.0)
+        gap = threshold - _skill_to_score(skills.get(skill, 0.0))
         if gap > 0.1:
             gaps[skill] = round(gap, 4)
     return dict(sorted(gaps.items(), key=lambda item: item[1], reverse=True))

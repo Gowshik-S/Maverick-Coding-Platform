@@ -2,7 +2,7 @@ export type UserSession = {
   user_id: number;
   name: string;
   email?: string;
-  skills?: Record<string, string>;
+  skills?: Record<string, string | number>;
 };
 
 const SESSION_KEY = 'maverick_user_session';
